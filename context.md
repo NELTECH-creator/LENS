@@ -168,20 +168,44 @@ The current codebase is a **Google Compass travel itinerary starter template** t
 
 ```
 /
-├── CLAUDE.md                          ← This file
+├── context.md                              ← This file
 ├── docs/
-│   ├── LENS-Basic PRD.md              ← Product requirements
-│   └── documentation.md               ← Technical architecture doc
-├── prompts/
-│   └── itineraryGen.prompt            ← Example Genkit prompt (reference)
-├── src/
-│   ├── index.ts                       ← Genkit entry point
-│   ├── app/
-│   │   ├── page.tsx                   ← Home page (to be replaced)
-│   │   └── api/                       ← API routes go here
-│   └── lib/
-│       └── genkit/
-│           ├── genkit.config.ts       ← AI config (Vertex AI + Firebase)
-│           └── itineraryFlow.ts       ← Example flow (reference)
-└── firebase.json                      ← Firebase config
+│   ├── LENS-Basic PRD.md                  ← Product requirements
+│   ├── LENS FRD.md                        ← Functional requirements
+│   └── documentation.md                   ← Technical architecture doc
+│
+├── frontend/                              ← Next.js app (UI team)
+│   ├── package.json
+│   ├── next.config.mjs
+│   ├── tailwind.config.ts
+│   ├── tsconfig.json
+│   └── src/
+│       ├── app/
+│       │   ├── page.tsx                   ← Home page (to be replaced with LENS UI)
+│       │   ├── layout.tsx
+│       │   └── api/                       ← Next.js API routes (calls backend)
+│       ├── components/                    ← React UI components
+│       ├── data/                          ← Static JSON data
+│       └── lib/
+│           ├── hooks/                     ← React hooks
+│           ├── base64.ts                  ← Utility: base64 helpers
+│           └── constants.ts               ← Shared constants
+│
+└── backend/                               ← Genkit AI server (backend team)
+    ├── package.json
+    ├── tsconfig.json
+    ├── firebase.json                      ← Firebase config
+    ├── firestore.rules
+    ├── apphosting.yaml
+    ├── prompts/                           ← Genkit .prompt files
+    ├── load-firestore-data/               ← Firestore seed scripts
+    └── src/
+        ├── index.ts                       ← Genkit entry point
+        └── lib/
+            ├── genkit/
+            │   ├── genkit.config.ts       ← AI config (Vertex AI + Firebase)
+            │   ├── itineraryFlow.ts       ← Example flow (reference for emergency flow)
+            │   └── types.ts               ← Type definitions
+            └── gemini/
+                └── types.ts               ← Gemini API types
 ```

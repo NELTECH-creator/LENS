@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Genkit
+.genkit/
+
+# Firebase
+/.firebaserc
+/.firebase
+
+# Env files
+.env*.local
+.env
+
+# Misc
+.DS_Store
+*.pem
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# TypeScript
+*.tsbuildinfo
