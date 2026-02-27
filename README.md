@@ -5,9 +5,10 @@
 ### _Real-time AI emergency guidance, right from your browser._
 
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org/)
-[![Gemini](https://img.shields.io/badge/Gemini_2.5-Flash-4285F4?logo=google)](https://ai.google.dev/)
-[![Genkit](https://img.shields.io/badge/Google-Genkit-FF6F00?logo=firebase)](https://firebase.google.com/docs/genkit)
+[![Gemini](https://img.shields.io/badge/Gemini_2.5-Flash_Native_Audio-4285F4?logo=google)](https://ai.google.dev/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-Python_3.12-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
 [![Firebase](https://img.shields.io/badge/Firebase-App_Hosting-FFCA28?logo=firebase)](https://firebase.google.com/)
+[![Cloud Run](https://img.shields.io/badge/Cloud_Run-Backend-4285F4?logo=googlecloud)](https://cloud.google.com/run)
 [![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-3-06B6D4?logo=tailwindcss)](https://tailwindcss.com/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-green.svg)](LICENSE)
 
@@ -19,7 +20,7 @@
 
 <br />
 
-[Getting Started](#-getting-started) · [How It Works](#-how-it-works) · [Architecture](#-system-architecture) · [API Reference](#-api-reference) · [Contributing](#-contributing)
+[Getting Started](#-getting-started) · [How It Works](#-how-it-works) · [Architecture](#-system-architecture) · [WebSocket Protocol](#-websocket-protocol) · [Contributing](#-contributing)
 
 </div>
 
@@ -37,7 +38,7 @@
 - [Project Structure](#-project-structure)
 - [Getting Started](#-getting-started)
 - [Environment Variables](#-environment-variables)
-- [API Reference](#-api-reference)
+- [WebSocket Protocol](#-websocket-protocol)
 - [Design Principles](#-design-principles)
 - [MVP Success Criteria](#-mvp-success-criteria)
 - [Team](#-team)
@@ -58,8 +59,8 @@ When someone encounters an emergency — a person bleeding, someone unconscious,
 
 1. **Sees** the emergency through the live camera feed
 2. **Classifies** the type and severity in real time
-3. **Speaks** calm, clear first-aid instructions through the phone's speakers
-4. **Loops** continuously, adapting instructions as the scene changes
+3. **Speaks** calm, clear first-aid instructions through the phone's speakers using Gemini's native audio
+4. **Adapts** continuously as the scene changes — no manual prompting needed
 
 No app to download. No account to create. Just open and point.
 
@@ -88,57 +89,61 @@ LENS fills the gap between **"emergency happens"** and **"professional help arri
 | Feature | Description |
 |---|---|
 | 📡 **Real-time vision analysis** | AI watches the live camera feed and identifies the emergency |
-| 🗣️ **Spoken instructions** | Calm Text-to-Speech guides the user step by step |
-| 🧠 **Multimodal AI reasoning** | Gemini 2.5 Flash processes image + audio + context simultaneously |
-| 😌 **Calm Mode** | All instructions are rewritten to be short, reassuring, and jargon-free |
+| 🗣️ **Spoken instructions** | Gemini's native audio speaks calm guidance — no separate TTS needed |
+| 🧠 **Multimodal reasoning** | Gemini 2.5 Flash processes video + audio + context simultaneously |
+| 😌 **Calm Mode** | Built into the system prompt — short, reassuring, jargon-free instructions |
 | 📱 **Zero install** | Runs in any modern mobile browser — no app download needed |
-| 🔄 **Continuous loop** | Captures new frames every 2–3 seconds and adapts instructions |
+| 🔄 **Continuous streaming** | Real-time WebSocket connection — not polling, not request/response |
+| 🎙️ **Proactive AI** | Gemini speaks when it sees something concerning, without being asked |
 
 ---
 
 ## 🔄 How It Works
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│  1. USER opens LENS in their browser                                │
-│  2. Taps "Start Emergency Session"                                  │
-│  3. Camera + microphone activate                                    │
-└────────────────────────┬────────────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  4. Every 2–3 seconds:                                              │
-│     • Capture a video frame → base64 image                          │
-│     • Capture speech transcript (optional, via SpeechRecognition)   │
-│  5. Send frame + context to backend API                             │
-└────────────────────────┬────────────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  BACKEND                                                            │
-│                                                                     │
-│  6. Gemini Multimodal API analyzes image + context                  │
-│  7. Returns structured response:                                    │
-│     {                                                               │
-│       "emergencyType": "Injury | Medical | Fire",                   │
-│       "confidence": "low | medium | high",                          │
-│       "instructions": ["Step 1...", "Step 2...", "Step 3..."]       │
-│     }                                                               │
-│  8. Calm Mode Filter rewrites instructions:                         │
-│     • Max 12–15 words per sentence                                  │
-│     • No medical jargon · No exclamation marks                      │
-│     • Reassuring, steady language                                   │
-│  9. Google Cloud TTS converts instructions → audio                  │
-└────────────────────────┬────────────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  10. Frontend receives:                                             │
-│      • Emergency classification badge                               │
-│      • Text instructions (on-screen)                                │
-│      • Audio instructions (played through speakers)                 │
-│  11. Loop → capture next frame → repeat from step 4                 │
-└─────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│  BROWSER (Next.js Frontend)                                      │
+│                                                                  │
+│  1. User opens LENS → taps "Start Emergency Session"             │
+│  2. Camera + microphone activate (MediaDevices API)              │
+│  3. Audio: captured as PCM 16-bit, 16kHz mono                    │
+│  4. Video: JPEG frames captured from camera stream               │
+│  5. Media streamed to backend via WebSocket (wss://)             │
+│                                                                  │
+│  ← Receives audio response (PCM 16-bit, 24kHz mono)             │
+│  ← Receives text transcription events (JSON)                    │
+│  ← Plays audio through device speakers                           │
+│  ← Displays emergency status + text overlay                      │
+└───────────────────────┬──────────────────────────────────────────┘
+                        │ WebSocket
+                        ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  BACKEND (FastAPI Python Server — Cloud Run)                     │
+│                                                                  │
+│  • WebSocket proxy between browser and Gemini Live API           │
+│  • Manages session lifecycle (connect, disconnect, timeout)      │
+│  • Injects emergency system prompt on session setup              │
+│  • Relays audio/video from browser → Gemini                      │
+│  • Relays audio responses from Gemini → browser                  │
+│  • Handles fail-safe: sends fallback if Gemini disconnects       │
+│  • API keys and credentials stay server-side                     │
+└───────────────────────┬──────────────────────────────────────────┘
+                        │ WebSocket
+                        ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  GEMINI LIVE API (Google Cloud)                                  │
+│                                                                  │
+│  Model: gemini-2.5-flash-native-audio-preview-12-2025            │
+│                                                                  │
+│  • Receives continuous audio + video stream                      │
+│  • Processes video at 1 FPS                                      │
+│  • Built-in Voice Activity Detection (VAD)                       │
+│  • Classifies emergency from visual + audio input                │
+│  • Generates calm spoken instructions (native audio output)      │
+│  • Supports barge-in (user can interrupt)                        │
+│  • Session memory within active session                          │
+│  • Proactive audio — speaks when it sees something concerning    │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -157,15 +162,13 @@ LENS fills the gap between **"emergency happens"** and **"professional help arri
 
 ## 🏗 System Architecture
 
-### High-Level Architecture
-
 ```
 ┌──────────────────────────────────────────────────────┐
 │                    CLIENT (Browser)                   │
 │                                                      │
 │  ┌──────────┐  ┌──────────────┐  ┌──────────────┐   │
-│  │  Camera   │  │    Speech    │  │   Audio      │   │
-│  │  Capture  │  │  Recognition │  │   Playback   │   │
+│  │  Camera   │  │  Microphone  │  │   Audio      │   │
+│  │  Capture  │  │  PCM 16kHz   │  │   Playback   │   │
 │  └─────┬─────┘  └──────┬───────┘  └──────▲───────┘   │
 │        │               │                 │           │
 │        └───────┬───────┘                 │           │
@@ -175,41 +178,32 @@ LENS fills the gap between **"emergency happens"** and **"professional help arri
 │  │      UI Controller      │─────────────┘           │
 │  └────────────┬────────────┘                         │
 └───────────────┼──────────────────────────────────────┘
-                │  HTTPS (POST)
+                │  WebSocket (wss://)
                 ▼
 ┌──────────────────────────────────────────────────────┐
-│              SERVER (Next.js API Routes)              │
+│         BACKEND (FastAPI — Cloud Run)                 │
+│                                                      │
+│  ┌──────────────────────────────────────┐            │
+│  │     /ws  WebSocket Endpoint          │            │
+│  │                                      │            │
+│  │  ┌────────────────────────────────┐  │            │
+│  │  │   GeminiLiveSession Wrapper    │──┼──→ Gemini  │
+│  │  │                                │  │    Live    │
+│  │  │  • Emergency system prompt     │  │    API     │
+│  │  │  • Audio/video/text relay      │  │            │
+│  │  │  • Transcription events        │  │            │
+│  │  │  • Barge-in handling           │  │            │
+│  │  └───────────┬────────────────────┘  │            │
+│  │              ▼                       │            │
+│  │  ┌────────────────────────────────┐  │            │
+│  │  │   Fail-safe Fallback           │  │            │
+│  │  │   (if Gemini disconnects)      │  │            │
+│  │  └────────────────────────────────┘  │            │
+│  └──────────────────────────────────────┘            │
 │                                                      │
 │  ┌──────────────┐                                    │
-│  │ POST /api/   │                                    │
-│  │   analyze    │                                    │
-│  └──────┬───────┘                                    │
-│         ▼                                            │
-│  ┌──────────────────────────────┐                    │
-│  │      Genkit Flow Engine      │                    │
-│  │                              │                    │
-│  │  ┌────────────────────────┐  │                    │
-│  │  │  Emergency Classifier  │──┼──→ Gemini 2.5     │
-│  │  │   (Multimodal Prompt)  │  │    Flash API      │
-│  │  └───────────┬────────────┘  │                    │
-│  │              ▼               │                    │
-│  │  ┌────────────────────────┐  │                    │
-│  │  │   Calm Mode Filter     │  │                    │
-│  │  └───────────┬────────────┘  │                    │
-│  │              ▼               │                    │
-│  │  ┌────────────────────────┐  │                    │
-│  │  │   Google Cloud TTS     │  │                    │
-│  │  └───────────┬────────────┘  │                    │
-│  └──────────────┼───────────────┘                    │
-│                 ▼                                    │
-│  ┌──────────────────────────────┐                    │
-│  │   Response: JSON + Audio     │                    │
-│  └──────────────────────────────┘                    │
-│                                                      │
-│  ┌──────────────────────────────┐                    │
-│  │  Firebase (Firestore)        │  ← Session state   │
-│  │  Firebase App Hosting        │  ← Deployment      │
-│  └──────────────────────────────┘                    │
+│  │ /health GET  │  ← Cloud Run health check          │
+│  └──────────────┘                                    │
 └──────────────────────────────────────────────────────┘
 ```
 
@@ -217,20 +211,20 @@ LENS fills the gap between **"emergency happens"** and **"professional help arri
 
 | Component | Purpose |
 |---|---|
-| **Emergency Classifier** | Genkit flow that sends camera frame + context to Gemini multimodal API and returns structured emergency classification |
-| **Calm Mode Filter** | Post-processor that rewrites AI-generated instructions into short, reassuring, jargon-free sentences |
-| **TTS Engine** | Google Cloud Text-to-Speech wrapper that converts calm instructions into natural-sounding audio |
-| **API Route** | Next.js `POST /api/analyze` endpoint that orchestrates the full pipeline |
+| **WebSocket Proxy** (`main.py`) | Accepts browser connections, creates Gemini session, relays audio/video/text bidirectionally |
+| **Gemini Live Session** (`gemini_live.py`) | Wraps the Google Gen AI SDK, manages async I/O queues and transcription events |
+| **Emergency System Prompt** (`emergency_prompt.py`) | Single instruction that makes Gemini act as a calm emergency agent — replaces both old classifier and Calm Mode filter |
+| **Fail-safe Fallback** (`fallback.py`) | Pre-built safety instructions served when Gemini is unreachable |
 
 ### Core Frontend Components
 
 | Component | Purpose |
 |---|---|
-| **Emergency Session Controller** | Manages camera/mic access, frame capture loop, and session lifecycle |
-| **Camera Capture** | Uses `MediaDevices.getUserMedia()` to access camera; captures frames as base64 every 2–3s |
-| **Speech Recognition** | Browser `SpeechRecognition` API for optional voice input from user |
-| **Audio Playback** | Plays TTS audio response through device speakers |
-| **Status Overlay** | Displays emergency type badge, confidence level, and text instructions |
+| **Emergency Session Controller** | Manages camera/mic access, WebSocket connection, and session lifecycle |
+| **Camera Capture** | Uses `MediaDevices.getUserMedia()` to access camera; streams JPEG frames via WebSocket |
+| **PCM Audio Capture** | Captures microphone audio as PCM 16-bit, 16kHz mono |
+| **Audio Playback** | AudioWorklet decodes and plays PCM 24kHz audio responses from Gemini |
+| **Status Overlay** | Displays transcripts, emergency type badge, and disclaimer |
 
 ---
 
@@ -238,16 +232,25 @@ LENS fills the gap between **"emergency happens"** and **"professional help arri
 
 | Layer | Technology | Purpose |
 |---|---|---|
-| **Framework** | [Next.js 15](https://nextjs.org/) (React 18) | Full-stack web framework with API routes |
-| **Language** | TypeScript | Type-safe development |
-| **Styling** | [Tailwind CSS 3](https://tailwindcss.com/) + Sass | Utility-first CSS + preprocessor |
-| **AI Orchestration** | [Google Genkit](https://firebase.google.com/docs/genkit) | AI flow management, prompt templates, structured output |
-| **AI Model** | [Gemini 2.5 Flash](https://ai.google.dev/) (via Vertex AI) | Multimodal analysis (image + text input) |
-| **TTS** | [Google Cloud Text-to-Speech](https://cloud.google.com/text-to-speech) | Natural-sounding audio generation |
-| **Database** | [Cloud Firestore](https://firebase.google.com/docs/firestore) | Real-time session state (optional) |
-| **Hosting** | [Firebase App Hosting](https://firebase.google.com/docs/app-hosting) | Serverless deployment on Cloud Run |
+| **Frontend** | [Next.js 15](https://nextjs.org/) (React 18) + TypeScript | UI framework |
+| **Styling** | [Tailwind CSS 3](https://tailwindcss.com/) + Sass | Utility-first styling |
+| **Backend** | [FastAPI](https://fastapi.tiangolo.com/) (Python 3.12) | WebSocket proxy server |
+| **AI** | [Gemini Live API](https://ai.google.dev/) (`gemini-2.5-flash-native-audio-preview-12-2025`) | Real-time multimodal AI with native audio I/O |
+| **SDK** | [Google Gen AI SDK for Python](https://pypi.org/project/google-genai/) (`google-genai`) | Live API client |
+| **Communication** | WebSocket (bidirectional) | Browser ↔ Backend ↔ Gemini |
+| **Frontend Hosting** | [Firebase App Hosting](https://firebase.google.com/docs/app-hosting) | Serverless deployment |
+| **Backend Hosting** | [Google Cloud Run](https://cloud.google.com/run) | Container deployment for FastAPI |
 | **Camera/Audio** | WebRTC / MediaDevices API | Browser-native camera and mic access |
-| **Speech Input** | Web SpeechRecognition API | Browser-native speech-to-text |
+
+### What Is NOT in the Stack
+
+| ~~Technology~~ | Why Not |
+|---|---|
+| ~~Google Cloud TTS~~ | Gemini speaks natively via the Live API — no separate TTS needed |
+| ~~Genkit / .prompt files~~ | Replaced by system prompt in Live API config |
+| ~~REST API endpoints~~ | Replaced by real-time WebSocket |
+| ~~Firestore~~ | No persistent storage needed for MVP |
+| ~~Separate Calm Mode filter~~ | Baked into the emergency system prompt |
 
 ---
 
@@ -255,63 +258,39 @@ LENS fills the gap between **"emergency happens"** and **"professional help arri
 
 ```
 LENS/
-├── CLAUDE.md                              # AI assistant context file
+├── context.md                             # AI assistant context file
 ├── README.md                              # This file
 ├── LICENSE                                # Apache 2.0
 │
 ├── docs/
 │   ├── LENS-Basic PRD.md                  # Product requirements document
+│   ├── LENS FRD.md                        # Functional requirements document
+│   ├── LENS-Architecture-Pivot.md         # Architecture pivot details
 │   ├── documentation.md                   # Technical architecture doc
 │   ├── contributing.md                    # Contribution guidelines
 │   └── code-of-conduct.md                # Code of conduct
 │
-├── prompts/
-│   └── emergencyClassify.prompt           # Gemini prompt for emergency analysis (planned)
+├── backend/                               # FastAPI Python server
+│   ├── main.py                            # FastAPI app — /ws WebSocket + /health
+│   ├── gemini_live.py                     # Gemini Live API session wrapper
+│   ├── emergency_prompt.py                # System prompt (calm emergency agent)
+│   ├── fallback.py                        # Fail-safe generic instructions
+│   ├── requirements.txt                   # Python deps
+│   ├── Dockerfile                         # Cloud Run container
+│   ├── deploy.sh                          # Automated Cloud Run deployment
+│   ├── .gitignore                         # Python gitignore
+│   └── venv/                              # Local virtual environment (gitignored)
 │
-├── src/
-│   ├── index.ts                           # Genkit entry point
-│   │
-│   ├── app/
-│   │   ├── layout.tsx                     # Root layout
-│   │   ├── page.tsx                       # Home / landing page
-│   │   ├── globals.scss                   # Global styles
-│   │   ├── not-found.tsx                  # 404 page
-│   │   └── api/                           # API routes (backend endpoints)
-│   │       ├── analyze/
-│   │       │   └── route.ts               # POST /api/analyze (planned)
-│   │       └── tts/
-│   │           └── route.ts               # POST /api/tts (planned)
-│   │
-│   ├── components/                        # React UI components
-│   │   └── svg/                           # SVG icon components
-│   │
-│   ├── data/                              # Static data files
-│   │
-│   └── lib/
-│       ├── genkit/
-│       │   ├── genkit.config.ts           # Genkit + Vertex AI configuration
-│       │   ├── emergencyFlow.ts           # Emergency classification flow (planned)
-│       │   ├── calmFilter.ts              # Calm Mode post-processor (planned)
-│       │   └── types.ts                   # TypeScript type definitions
-│       │
-│       ├── tts/
-│       │   └── googleTTS.ts              # Google Cloud TTS wrapper (planned)
-│       │
-│       └── hooks/                         # Custom React hooks
-│
-├── load-firestore-data/                   # Firestore seed data scripts
-│
-├── firebase.json                          # Firebase project config
-├── firestore.rules                        # Firestore security rules
-├── firestore.indexes.json                 # Firestore indexes
-├── apphosting.yaml                        # Firebase App Hosting (Cloud Run) config
-│
-├── next.config.mjs                        # Next.js configuration
-├── tailwind.config.ts                     # Tailwind CSS configuration
-├── tsconfig.json                          # TypeScript configuration
-├── postcss.config.js                      # PostCSS configuration
-├── package.json                           # Dependencies and scripts
-└── package-lock.json                      # Dependency lock file
+└── frontend/                              # Next.js app
+    ├── package.json
+    ├── next.config.mjs
+    ├── tailwind.config.ts
+    ├── tsconfig.json
+    └── src/
+        ├── app/                           # Next.js app router pages
+        ├── components/                    # React UI components
+        ├── data/                          # Static data
+        └── lib/                           # Utilities and hooks
 ```
 
 ---
@@ -320,131 +299,100 @@ LENS/
 
 ### Prerequisites
 
-- **Node.js** 20, 22, or 24
-- **npm** (comes with Node.js)
-- **Google Cloud project** with the following APIs enabled:
-  - Vertex AI API
-  - Cloud Text-to-Speech API
-- **Firebase project** linked to your GCP project
-- **Genkit CLI** (installed as dev dependency)
+- **Python 3.12+** (for the backend)
+- **Node.js 20+** and **npm** (for the frontend)
+- **Google Cloud project** with the Vertex AI API enabled
+- **gcloud CLI** installed and authenticated
 
-### Installation
+### Backend Setup
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/NELTECH-creator/LENS.git
-cd LENS
+# 1. Navigate to the backend directory
+cd backend
+
+# 2. Create a Python virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Configure environment variables
+echo "PROJECT_ID=your-gcp-project-id" > .env
+
+# 5. Authenticate with Google Cloud
+gcloud auth application-default login
+
+# 6. Start the backend server
+python main.py
+# → Runs on http://localhost:8080
+# → Health check: http://localhost:8080/health
+# → WebSocket: ws://localhost:8080/ws
+```
+
+### Frontend Setup
+
+```bash
+# 1. Navigate to the frontend directory
+cd frontend
 
 # 2. Install dependencies
 npm install
 
-# 3. Set up environment variables (see below)
-cp .env.example .env.local  # or create manually
-
-# 4. Configure your Firebase project ID
-# Edit src/lib/genkit/genkit.config.ts and replace REPLACE_WITH_YOUR_PROJECT_ID
-
-# 5. Start the development server
+# 3. Start the development server
 npm run dev
 ```
-
-### Available Scripts
-
-| Script | Command | Description |
-|---|---|---|
-| **Dev** | `npm run dev` | Start Genkit + Next.js dev server with hot reload |
-| **Dev (Next only)** | `npm run dev:next` | Start only Next.js (no Genkit) |
-| **Dev (Genkit only)** | `npm run dev:genkit` | Start only Genkit dev server |
-| **Build** | `npm run build` | Production build |
-| **Lint** | `npm run lint` | Run ESLint |
 
 ---
 
 ## 🔐 Environment Variables
 
-Create a `.env.local` file in the project root:
+### Backend (`backend/.env`)
 
 ```env
-# Google Cloud / Firebase
-GOOGLE_CLOUD_PROJECT=your-gcp-project-id
-GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account-key.json
+# Required
+PROJECT_ID=your-gcp-project-id
 
-# Vertex AI
-VERTEX_AI_LOCATION=us-central1
-
-# Google Cloud Text-to-Speech (uses same service account)
-# No additional env vars needed if GOOGLE_APPLICATION_CREDENTIALS is set
-
-# Optional: Firebase
-FIREBASE_PROJECT_ID=your-firebase-project-id
+# Optional (defaults shown)
+LOCATION=us-central1
+MODEL=gemini-2.5-flash-native-audio-preview-12-2025
+PORT=8080
 ```
+
+> **Note:** The backend uses Application Default Credentials (ADC). Run `gcloud auth application-default login` to authenticate locally, or use a service account on Cloud Run.
 
 ---
 
-## 📡 API Reference
+## 📡 WebSocket Protocol
 
-### `POST /api/analyze`
+The backend communicates with the frontend over a single WebSocket connection at `/ws`.
 
-Analyzes a camera frame and returns emergency classification with spoken instructions.
+### Client → Server
 
-**Request:**
+| Format | Content |
+|---|---|
+| **Binary** | PCM audio from microphone (16-bit, 16kHz, mono) |
+| **JSON text** `{"type": "image", "data": "<base64>"}` | JPEG camera frame |
+| **Plain text** | Text message to Gemini |
 
-```json
-{
-  "frame": "data:image/jpeg;base64,/9j/4AAQSkZJRg...",
-  "transcript": "someone fell down and is not moving",
-  "sessionId": "optional-session-id"
-}
-```
+### Server → Client
 
-| Field | Type | Required | Description |
+| Format | Content |
+|---|---|
+| **Binary** | PCM audio response from Gemini (16-bit, 24kHz, mono) |
+| **JSON text** `{"type": "user_transcript", "text": "..."}` | User's speech transcription |
+| **JSON text** `{"type": "gemini_transcript", "text": "..."}` | Gemini's speech transcription |
+| **JSON text** `{"type": "turn_complete"}` | Gemini finished speaking |
+| **JSON text** `{"type": "interrupted"}` | User interrupted (barge-in) |
+| **JSON text** `{"type": "fallback", ...}` | Fail-safe instructions |
+| **JSON text** `{"type": "error", "error": "..."}` | Error event |
+
+### Audio Specifications
+
+| Direction | Format | Sample Rate | Channels |
 |---|---|---|---|
-| `frame` | `string` | ✅ | Base64-encoded JPEG image from camera |
-| `transcript` | `string` | ❌ | User's speech transcript for additional context |
-| `sessionId` | `string` | ❌ | Session identifier for continuity |
-
-**Response:**
-
-```json
-{
-  "emergencyType": "Medical",
-  "confidence": "high",
-  "instructions": [
-    "Check if the person is breathing.",
-    "Gently tilt their head back to open the airway.",
-    "Place them on their side in a recovery position.",
-    "Stay with them and keep them warm."
-  ],
-  "audio": "data:audio/mp3;base64,SUQzBAAAAAAAI1RTU...",
-  "disclaimer": "This is AI guidance only. Call emergency services immediately."
-}
-```
-
-| Field | Type | Description |
-|---|---|---|
-| `emergencyType` | `"Injury" \| "Medical" \| "Fire"` | Classified emergency type |
-| `confidence` | `"low" \| "medium" \| "high"` | AI confidence level |
-| `instructions` | `string[]` | Calm, filtered step-by-step instructions |
-| `audio` | `string` | Base64-encoded TTS audio of the instructions |
-| `disclaimer` | `string` | Legal/safety disclaimer (always included) |
-
-**Error Response:**
-
-```json
-{
-  "error": "analysis_failed",
-  "fallback": true,
-  "instructions": [
-    "Stay calm and assess the situation.",
-    "Call emergency services right away.",
-    "Move to a safe location if needed.",
-    "Wait for help to arrive."
-  ],
-  "audio": "data:audio/mp3;base64,..."
-}
-```
-
-> ⚠️ **Fail-safe:** If AI analysis fails for any reason, the API returns generic safety guidance instead of an error. The user must never see a blank screen during an emergency.
+| Browser → Backend → Gemini (mic) | PCM 16-bit signed | 16,000 Hz | Mono |
+| Gemini → Backend → Browser (response) | PCM 16-bit signed | 24,000 Hz | Mono |
 
 ---
 
@@ -459,6 +407,7 @@ Analyzes a camera frame and returns emergency classification with spoken instruc
 | 5 | **Zero friction** | Works on any mobile browser. No app download, no account, no setup. |
 | 6 | **Accessible language** | No medical jargon. Max 12–15 words per instruction. A child should understand. |
 | 7 | **Always disclaim** | Every response reminds the user to call professional emergency services. |
+| 8 | **Proactive guidance** | AI speaks when it sees something — the user shouldn't need to ask. |
 
 ---
 
@@ -469,7 +418,7 @@ Analyzes a camera frame and returns emergency classification with spoken instruc
 | **Demo stability** | Runs start-to-finish without crash or failure |
 | **Response latency** | ≤ 3 seconds from frame capture to audio playback |
 | **Classification accuracy** | Correctly identifies Injury / Medical / Fire scenarios |
-| **Instruction delivery** | Calm, spoken instructions play within 3 seconds |
+| **Instruction delivery** | Calm, spoken instructions via Gemini's native audio |
 | **Judge comprehension** | Value proposition understood in under 60 seconds |
 
 ---
@@ -478,13 +427,14 @@ Analyzes a camera frame and returns emergency classification with spoken instruc
 
 | Role | Responsibility |
 |---|---|
-| 🧠 **Backend Engineer** | API routes, Genkit AI flows, Calm Mode filter, TTS integration |
-| 🎨 **Frontend Engineer** | Emergency session UI, camera/mic integration, audio playback, status overlay |
+| 🧠 **Backend Engineer** | FastAPI server, Gemini Live API integration, system prompt, fallback, Cloud Run deployment |
+| 🎨 **Frontend Engineer** | Emergency session UI, camera/mic capture, WebSocket client, PCM audio playback, status overlay |
 | 🗺 **Maps & Routing Engineer** | Location awareness, nearby hospital lookup (future) |
 | 📊 **Product & Docs Lead** | PRD, documentation, demo coordination, testing |
 
 **Project Lead:** Nwakanma Nelson  
-**Location:** Nigeria 🇳🇬
+**Location:** Nigeria 🇳🇬  
+**Hackathon:** Gemini Live Agent Challenge — **Live Agents** category
 
 ---
 
@@ -492,30 +442,35 @@ Analyzes a camera frame and returns emergency classification with spoken instruc
 
 ### MVP (Current — Due March 16, 2026)
 
-- [x] Project scaffolding and tech stack setup
-- [x] Genkit + Vertex AI configuration
-- [x] Firebase infrastructure
-- [ ] Emergency classification Genkit flow
-- [ ] Calm Mode instruction filter
-- [ ] Google Cloud TTS integration
-- [ ] `POST /api/analyze` endpoint
-- [ ] Emergency session UI (camera + mic)
-- [ ] Audio playback + text display
-- [ ] Emergency type badge component
-- [ ] Fail-safe fallback responses
-- [ ] End-to-end demo
+#### Backend
+- [x] FastAPI server with WebSocket endpoint (`/ws`)
+- [x] Gemini Live API session wrapper (`GeminiLiveSession`)
+- [x] Emergency system prompt (10-rule calm agent instruction)
+- [x] Fail-safe fallback instructions
+- [x] Dockerfile for Cloud Run
+- [x] Automated deployment script (`deploy.sh`)
+- [ ] `.env` configuration with real GCP project
+- [ ] End-to-end test with live Gemini connection
+- [ ] Cloud Run deployment
+
+#### Frontend
+- [ ] Emergency session page (`/session`)
+- [ ] WebSocket client
+- [ ] Camera/mic capture + PCM encoding
+- [ ] AudioWorklet for PCM playback
+- [ ] Emergency session controller component
+- [ ] Status overlay (emergency badge + transcripts)
+- [ ] Disclaimer banner
+- [ ] Landing page with "Start Emergency Session" button
 
 ### Post-MVP
 
 | Feature | Description |
 |---|---|
-| 🌐 Multi-language TTS | Support for multiple languages and regional dialects |
+| 🌐 Multi-language support | Gemini speaks in the user's language |
 | 📍 Location awareness | Auto-detect nearest hospital and emergency services |
 | 📴 Offline fallback | Text-based guidance when network is unavailable |
 | 📱 SMS integration | Auto-send emergency alerts to contacts or services |
-| 🤖 Predictive dispatch | AI-powered prediction of emergency type before full analysis |
-| 🚑 Ambulance routing | Traffic-aware navigation for emergency vehicles |
-| 🏛️ Government APIs | Integration with national emergency response systems |
 | 🫁 More emergency types | Choking, drowning, seizures, allergic reactions, etc. |
 
 ---
@@ -525,7 +480,8 @@ Analyzes a camera frame and returns emergency classification with spoken instruc
 | Milestone | Date |
 |---|---|
 | 🚀 Development kickoff | February 17, 2026 |
-| 🔨 Backend core (AI + TTS) | ~March 3, 2026 |
+| 🔨 Backend scaffolding complete | February 27, 2026 ✅ |
+| 🔧 Backend live testing & deployment | ~March 3, 2026 |
 | 🎨 Frontend integration | ~March 7, 2026 |
 | 🧪 Testing phase begins | March 9, 2026 |
 | 📌 **Project deadline** | **March 16, 2026** |
@@ -536,11 +492,12 @@ Analyzes a camera frame and returns emergency classification with spoken instruc
 
 | Concern | Approach |
 |---|---|
-| **Video data** | Frames are processed in memory and immediately discarded. No storage, ever. |
-| **Audio data** | Speech transcripts are not persisted beyond the active session. |
+| **Video data** | Frames are streamed and immediately discarded. No storage, ever. |
+| **Audio data** | Audio is streamed in real time and not recorded or persisted. |
 | **No recordings** | LENS does not record, save, or transmit video/audio to any storage. |
 | **Authentication** | No user accounts required for MVP. Zero PII collected. |
-| **Communication** | All API calls over HTTPS. |
+| **Credentials** | API keys and GCP credentials stay server-side — never exposed to the browser. |
+| **Communication** | All connections over HTTPS/WSS. |
 | **Disclaimer** | Every response includes a reminder to contact professional emergency services. |
 | **Compliance direction** | Designed with HIPAA-like privacy principles in mind. |
 
@@ -560,8 +517,9 @@ We welcome contributors passionate about **civic tech**, **healthcare innovation
 
 ### Guidelines
 
-- Follow existing code style (ESLint + Prettier configs included)
-- Write TypeScript — no plain JS
+- Follow existing code style
+- Backend: Python (FastAPI) — follow PEP 8
+- Frontend: TypeScript — follow ESLint + Prettier configs
 - Keep components focused and reusable
 - Test your changes before submitting
 

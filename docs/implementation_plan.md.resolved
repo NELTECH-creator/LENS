@@ -1,0 +1,147 @@
+# Scaffold New Python FastAPI + Gemini Live API Backend
+
+Replace the old TypeScript/Genkit backend with a Python FastAPI server that proxies WebSocket connections between the Next.js frontend and the Gemini Live API. Based on the [Google reference demo](https://github.com/GoogleCloudPlatform/generative-ai/tree/main/gemini/multimodal-live-api/native-audio-websocket-demo-apps/plain-js-python-sdk-demo-app) and the [LENS Architecture Pivot](file:///home/lukeo/Desktop/LENS/docs/LENS-Architecture-Pivot.md).
+
+> [!IMPORTANT]
+> This **deletes all old TypeScript/Genkit files** from `backend/` (package.json, tsconfig.json, src/, prompts/, node_modules/, etc.) and replaces them with a Python project. The old Genkit code is no longer needed per the architecture pivot.
+
+---
+
+## Proposed Changes
+
+### Cleanup — Remove Old TypeScript/Genkit Files
+
+#### [DELETE] Old Node.js files in `backend/`
+
+The following will be removed:
+- [package.json](file:///home/lukeo/Desktop/LENS/package.json), [package-lock.json](file:///home/lukeo/Desktop/LENS/package-lock.json), [tsconfig.json](file:///home/lukeo/Desktop/LENS/tsconfig.json)
+- `src/` (Genkit entry point + lib)
+- `prompts/` (Genkit [.prompt](file:///home/lukeo/Desktop/LENS/prompts/itineraryGen.prompt) files)
+- `load-firestore-data/` (Firestore seed scripts — not part of new arch)
+- `node_modules/`, `.genkit/`, `dist/`
+- [firebase.json](file:///home/lukeo/Desktop/LENS/firebase.json), [firestore.rules](file:///home/lukeo/Desktop/LENS/firestore.rules), [firestore.indexes.json](file:///home/lukeo/Desktop/LENS/firestore.indexes.json), [apphosting.yaml](file:///home/lukeo/Desktop/LENS/apphosting.yaml)
+
+> [!NOTE]
+> Firebase config files ([firebase.json](file:///home/lukeo/Desktop/LENS/firebase.json), [apphosting.yaml](file:///home/lukeo/Desktop/LENS/apphosting.yaml), etc.) belong with the **frontend** now, not the backend. They should already exist or be moved to `frontend/` by the frontend team.
+
+---
+
+### New Python Backend Files
+
+#### [NEW] [requirements.txt](file:///home/lukeo/Desktop/LENS/backend/requirements.txt)
+
+Python dependencies:
+- `fastapi` — WebSocket server framework
+- `uvicorn` — ASGI server
+- `google-genai` — Google Gen AI SDK (Gemini Live API client)
+- `websockets` — WebSocket protocol support
+- `python-dotenv` — `.env` file loading
+
+---
+
+#### [NEW] [emergency_prompt.py](file:///home/lukeo/Desktop/LENS/backend/emergency_prompt.py)
+
+Contains the `EMERGENCY_SYSTEM_PROMPT` string constant — the system instruction that tells Gemini to act as a calm emergency guidance agent. This replaces both the old Genkit flow logic AND the Calm Mode filter. Key rules:
+- Classify emergency (Injury / Medical / Fire)
+- Speak step-by-step first aid instructions
+- Max 12–15 words per sentence, no jargon, no exclamation marks
+- Reassuring tone throughout
+- Always remind to call emergency services
+- If unsure, give general safety guidance (never silence)
+
+---
+
+#### [NEW] [fallback.py](file:///home/lukeo/Desktop/LENS/backend/fallback.py)
+
+Contains pre-built fallback text instructions for when Gemini is unavailable (connection drops, API errors, session timeout). Returns a list of generic safety steps. This is the fail-safe — the user must never see a blank/silent screen.
+
+---
+
+#### [NEW] [gemini_live.py](file:///home/lukeo/Desktop/LENS/backend/gemini_live.py)
+
+Gemini Live API session wrapper class (`GeminiLiveSession`). Based on the Google reference demo's `GeminiLive` class, customized for LENS:
+- Initializes `genai.Client` with Vertex AI project credentials
+- Opens a Live API session with:
+  - `response_modalities: [AUDIO]`
+  - Emergency system prompt from `emergency_prompt.py`
+  - Voice: `Aoede` (calm, neutral tone)
+  - Input/output audio transcription enabled
+  - Proactive audio enabled (Gemini speaks when it sees something)
+- Manages three async input streams: audio, video, text
+- Receives audio output + transcription events from Gemini
+- Yields events (transcription, turn_complete, interrupted, errors) to caller
+
+---
+
+#### [NEW] [main.py](file:///home/lukeo/Desktop/LENS/backend/main.py)
+
+FastAPI application with:
+- **`/ws` WebSocket endpoint** — the core: accepts browser connection, creates a `GeminiLiveSession`, relays audio/video/text bidirectionally
+- **`/health` GET endpoint** — health check for Cloud Run
+- **CORS middleware** — allows frontend origin
+- Handles `WebSocketDisconnect` gracefully
+- On Gemini session error → sends fallback instructions to client as JSON
+- Configurable via environment variables: `PROJECT_ID`, `LOCATION`, `MODEL`
+
+---
+
+#### [NEW] [Dockerfile](file:///home/lukeo/Desktop/LENS/backend/Dockerfile)
+
+Multi-stage Docker container for Cloud Run:
+- Base: `python:3.12-slim`
+- Install deps from `requirements.txt`
+- Copy source files
+- Expose port 8080 (Cloud Run default)
+- Run with `uvicorn main:app --host 0.0.0.0 --port 8080`
+
+---
+
+#### [NEW] [deploy.sh](file:///home/lukeo/Desktop/LENS/backend/deploy.sh)
+
+Shell script for deploying to Cloud Run:
+- Builds container with `gcloud builds submit`
+- Deploys to Cloud Run with `gcloud run deploy`
+- Sets environment variables from `.env`
+- Prints the deployed service URL
+
+---
+
+#### [MODIFY] [.gitignore](file:///home/lukeo/Desktop/LENS/backend/.gitignore)
+
+Replace Node.js gitignore with Python gitignore:
+- `__pycache__/`, `*.pyc`, `.venv/`, `venv/`
+- `.env`, `.env.local`
+- `dist/`, `.genkit/`
+
+---
+
+## Verification Plan
+
+### Automated Tests
+
+No existing tests to inherit — the old backend had no test files.
+
+**Startup smoke test** (run after scaffolding):
+```bash
+cd /home/lukeo/Desktop/LENS/backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python3 -c "from main import app; print('FastAPI app imported successfully')"
+```
+
+This confirms all imports resolve and the app object is constructable without a live GCP connection.
+
+### Manual Verification
+
+1. **Start the backend locally:**
+   ```bash
+   cd /home/lukeo/Desktop/LENS/backend
+   source venv/bin/activate
+   python3 main.py
+   ```
+2. **Verify health endpoint:** Open `http://localhost:8080/health` in a browser — should return `{"status": "ok"}`
+3. **Verify WebSocket endpoint exists:** Use a WebSocket client (e.g. browser console or `websocat`) to connect to `ws://localhost:8080/ws` — should accept the connection (will error when trying to start Gemini session without valid GCP credentials, but the WebSocket handshake itself should succeed)
+
+> [!NOTE]
+> Full end-to-end testing (audio/video streaming through Gemini) requires valid GCP credentials and the `PROJECT_ID` environment variable set. This will be tested separately once credentials are configured.
