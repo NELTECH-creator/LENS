@@ -1,0 +1,25 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "lens",
+            "cwd": "frontend\\lens",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "lens (profile mode)",
+            "cwd": "frontend\\lens",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile"
+        },
+        {
+            "name": "lens (release mode)",
+            "cwd": "frontend\\lens",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release"
+        }
+    ]
+}
